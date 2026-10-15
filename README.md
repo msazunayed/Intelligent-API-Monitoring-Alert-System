@@ -150,3 +150,9 @@ Logs print to the console and are appended to `logs/app.log`.
 - No authentication on the endpoints. Add it before any production use.
 - Resolved alerts are hidden from the dashboard but kept in the database. There is no history view yet.
 - Email reporting is not implemented (it is optional in the brief).
+
+
+## Result
+
+https://github.com/user-attachments/assets/bc71da3a-ded9-4a0b-b33b-4955d9ae825b
+
