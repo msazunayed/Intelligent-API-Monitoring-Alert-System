@@ -1,0 +1,6 @@
+node_modules
+.env
+alerts.db
+alerts.db-wal
+alerts.db-shm
+logs

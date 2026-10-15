@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Alerts</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; color: #222; background: #fafafa; }
+    h2 { margin: 0 0 4px; }
+    .meta { color: #666; font-size: 14px; margin-bottom: 16px; }
+    .summary { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat { background: #fff; border: 1px solid #e3e3e3; border-radius: 8px; padding: 10px 16px; min-width: 110px; }
+    .stat b { display: block; font-size: 22px; }
+    .card { background: #fff; border: 1px solid #e3e3e3; border-left: 5px solid #f9ab00; border-radius: 8px;
+            padding: 14px 16px; margin-bottom: 12px; }
+    .card.critical { border-left-color: #d93025; }
+    .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .head h3 { margin: 0; font-size: 16px; }
+    .time { margin-left: auto; color: #777; font-size: 12px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .badge.critical { background: #fde2e2; color: #a50e0e; }
+    .badge.warning { background: #fff4d6; color: #7a5a00; }
+    .issues { margin: 10px 0 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .issue { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: #f1f3f4; }
+    .issue.critical { background: #fde2e2; }
+    .issue.warning { background: #fff4d6; }
+    .issue small { color: #555; }
+    .msg { font-size: 14px; line-height: 1.45; margin: 8px 0 0; }
+    .src { font-size: 11px; color: #888; margin-top: 6px; }
+    button { font-size: 12px; border: 1px solid #ccc; background: #fff; border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+    button:hover { background: #f1f3f4; }
+    .empty { text-align: center; color: #888; padding: 32px; background: #fff; border: 1px dashed #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Active API Alerts</h2>
+  <div class="meta" id="meta">Loading...</div>
+  <div class="summary" id="summary"></div>
+  <div id="list"></div>
+
+  <script>
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const rank = { critical: 2, warning: 1 };
+
+    // One card per API: the alert rows for the same API share one AI message.
+    function group(alerts) {
+      const map = new Map();
+      for (const a of alerts) {
+        if (!map.has(a.api_name)) map.set(a.api_name, { api: a.api_name, items: [] });
+        map.get(a.api_name).items.push(a);
+      }
+      return [...map.values()].map(g => ({
+        ...g,
+        severity: g.items.reduce((w, i) => (rank[i.severity] > rank[w] ? i.severity : w), 'warning'),
+        time: g.items.map(i => i.created_at).sort().pop(),
+        message: g.items[0].message,
+        source: g.items[0].message_source
+      })).sort((a, b) => rank[b.severity] - rank[a.severity] || a.api.localeCompare(b.api));
+    }
+
+    async function resolveGroup(ids) {
+      await Promise.all(ids.map(id => fetch(`/alerts/${id}/resolve`, { method: 'POST' })));
+      load();
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/alerts');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const groups = group(data);
+        const crit = groups.filter(g => g.severity === 'critical').length;
+
+        document.getElementById('meta').textContent =
+          `${data.length} active alert(s) across ${groups.length} API(s). Refreshes every 10 seconds.`;
+        document.getElementById('summary').innerHTML =
+          `<div class="stat"><b>${groups.length}</b>APIs affected</div>` +
+          `<div class="stat"><b>${crit}</b>Critical</div>` +
+          `<div class="stat"><b>${groups.length - crit}</b>Warning</div>`;
+
+        const list = document.getElementById('list');
+        if (groups.length === 0) {
+          list.innerHTML = '<div class="empty">No active alerts. All monitored APIs look healthy.</div>';
+          return;
+        }
+        list.innerHTML = groups.map(g => `
+          <div class="card ${esc(g.severity)}">
+            <div class="head">
+              <h3>${esc(g.api)}</h3>
+              <span class="badge ${esc(g.severity)}">${esc(g.severity)}</span>
+              <span class="time">${esc(g.time)} UTC</span>
+              <button data-ids="${g.items.map(i => i.id).join(',')}">Resolve</button>
+            </div>
+            <div class="issues">
+              ${g.items.map(i => `<span class="issue ${esc(i.severity)}">${esc(i.type)} <small>${esc(i.detail)}</small></span>`).join('')}
+            </div>
+            <p class="msg">${esc(g.message)}</p>
+            <div class="src">${g.source === 'llm' ? 'AI-generated alert' : 'Rule-based alert (AI unavailable)'}</div>
+          </div>`).join('');
+        list.querySelectorAll('button[data-ids]').forEach(b =>
+          b.addEventListener('click', () => resolveGroup(b.dataset.ids.split(',').map(Number))));
+      } catch (err) {
+        document.getElementById('meta').textContent = `Could not load alerts: ${err.message}`;
+      }
+    }
+
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

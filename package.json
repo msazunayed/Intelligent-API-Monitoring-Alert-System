@@ -1,0 +1,16 @@
+{
+  "name": "ai-api-monitor",
+  "version": "1.0.0",
+  "description": "API monitoring with anomaly detection and AI-generated alerts",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "monitor:sample": "curl -s -X POST http://localhost:3000/monitor -H 'Content-Type: application/json' -d @sample/input.json"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
